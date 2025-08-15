@@ -7,6 +7,7 @@ import configparser
 from datetime import datetime
 from pydub import AudioSegment
 import torch
+from pathlib import Path
 
 class ConfigParser:
     """Класс для парсинга конфигурации"""
@@ -116,7 +117,6 @@ class ConfigParser:
             print(f"Предупреждение: Не удалось преобразовать '{value}' в список int. Используется значение по умолчанию.")
             return default
 
-
 class AudioProcessor:
     """Класс для обработки аудиофайлов"""
     
@@ -131,6 +131,7 @@ class AudioProcessor:
         self.current_dirname = None
         self.current_basename = None
         self.current_name_noext = None
+        self.current_relative_path = None
         self.current_timecode_file = None
         self.current_rawtext_file = None
         self.current_error_file = None
@@ -141,6 +142,8 @@ class AudioProcessor:
         self.current_dirname = os.path.dirname(audio_path)
         self.current_basename = os.path.basename(audio_path)
         self.current_name_noext = os.path.splitext(self.current_basename)[0]
+        self.current_relative_path = Path(audio_path).relative_to(self.current_dirname)
+
         self.current_timecode_file = os.path.join(self.current_dirname, self.current_name_noext + '_timecodes.txt')
         self.current_rawtext_file = os.path.join(self.current_dirname, self.current_name_noext + '_raw.txt')
         self.current_error_file = os.path.join(self.current_dirname, self.current_name_noext + '_ERROR.txt')
@@ -163,18 +166,7 @@ class AudioProcessor:
             raise ValueError(f"Unknown transcribe_engine: '{engine_name}'. Use 'openai-whisper'.")
         
         print('✅ Model loaded.\n')
-    
-    def _setup_file_paths(self, audio_path):
-        """Настройка путей для текущего аудиофайла"""
-        self.current_audio_path = audio_path
-        self.current_dirname = os.path.dirname(audio_path)
-        self.current_basename = os.path.basename(audio_path)
-        self.current_name_noext = os.path.splitext(self.current_basename)[0]
-        
-        self.current_timecode_file = os.path.join(self.current_dirname, self.current_name_noext + '_timecodes.txt')
-        self.current_rawtext_file = os.path.join(self.current_dirname, self.current_name_noext + '_raw.txt')
-        self.current_error_file = os.path.join(self.current_dirname, self.current_name_noext + '_ERROR.txt')
-    
+
     def find_audio_files(self):
         """Поиск аудиофайлов в указанной директории"""
         audio_folder = self.config.audio_folder
@@ -210,27 +202,25 @@ class AudioProcessor:
         
         # Обработка файлов
         for idx, audio_file in enumerate(audio_files, 1):
-            self._process_audiofile(audio_file, idx, total_files)
+            self._process_audiofile_openai_whisper(audio_file, idx, total_files)
         
         print('✅ All files processed.')
-        print(f'Total time: {datetime.now() - self.start_time}')
+        print(f'✅ Total time: {self._format_elapsed_time(datetime.now() - self.start_time)}')
+        print()
    
-    def _process_audiofile(self, audio_path, file_index, total_files):
-        """Обработка одного аудиофайла"""
-        if self.USING_FASTER:
-            self._process_audiofile_fasterwhisper(audio_path, file_index, total_files)
-        else:
-            self._process_audiofile_openai_whisper(audio_path, file_index, total_files)
-    
     def _process_audiofile_openai_whisper(self, audio_path, file_index, total_files):
         """Обработка аудиофайла с использованием openai-whisper"""
         # Проверяем, существует ли файл
         if not os.path.exists(audio_path):
             print(f'[{file_index:3d}/{total_files}] ❌ File not found: {audio_path}')
             return
-        
+
         file_start_time = datetime.now()
-        print(f'[{file_index:3d}/{total_files}] Processing: {audio_path}')
+
+        # Пути к выходным файлам
+        self._setup_file_paths(audio_path)
+
+        print(f'[{file_index:3d}/{total_files}] Processing: {self.current_relative_path}')
         
         # Определяем длительность
         try:
@@ -240,15 +230,7 @@ class AudioProcessor:
         except Exception as e:
             print(f'    ⚠️ Could not read duration: {e}')
             duration = 0
-        
-        # Пути к выходным файлам
-        dirname = os.path.dirname(audio_path)
-        basename = os.path.basename(audio_path)
-        name_noext = os.path.splitext(basename)[0]
-        
-        timecode_file = os.path.join(dirname, name_noext + '_timecodes.txt')
-        rawtext_file = os.path.join(dirname, name_noext + '_raw.txt')
-        
+
         try:
             # Подготовка параметров для openai-whisper
             transcribe_kwargs = {
@@ -287,7 +269,7 @@ class AudioProcessor:
                 print(f"    Transcribing... (duration: {self._format_time(duration)})")
             
             full_text = []
-            with open(timecode_file, 'w', encoding='UTF-8') as f:
+            with open(self.current_timecode_file, 'w', encoding='UTF-8') as f:
                 for i, segment in enumerate(result['segments']):
                     start = segment['start']
                     end = segment['end']
@@ -295,111 +277,31 @@ class AudioProcessor:
                     hh, mm, ss = int(start // 3600), int((start % 3600) // 60), int(start % 60)
                     f.write(f"[{hh:02d}:{mm:02d}:{ss:02d}] {text}\n")
                     full_text.append(text)
-                    if duration > 0:
-                        self._print_progress_bar(end, duration)
-            
-            if duration > 0:
-                self._print_progress_bar(duration, duration)
-            print()
+                    # скрываем избыточный progress bar с прогрессом
+#                    if duration > 0:
+#                        self._print_progress_bar(end, duration)
+
+#           скрываем избыточный progress bar с прогрессом
+#            if duration > 0:
+#                self._print_progress_bar(duration, duration)
+#            print()
             
             # Сохраняем сырой текст
-            self._save_text_files(full_text, rawtext_file)
+            self._save_text_files(full_text, self.current_rawtext_file)
             
-            print(f'✅ Done in {datetime.now() - file_start_time}')
+            # print(f'✅ Done in {datetime.now() - file_start_time}')
+            print(f'✅ Done in {self._format_elapsed_time(datetime.now() - file_start_time)}')
+            print()
         
         except Exception as e:
             print(f'\n❌ Error processing {audio_path}: {e}')
             # Записываем ошибку в файл
-            error_file_path = os.path.join(dirname, name_noext + '_ERROR.txt')
-            with open(error_file_path, 'w', encoding='UTF-8') as ef:
-                ef.write(f"Error processing {audio_path}: {e}\n")
-    
-    def _process_audiofile_fasterwhisper(self, audio_path, file_index, total_files):
-        """Обработка аудиофайла с использованием faster-whisper"""
-        # Проверяем, существует ли файл
-        if not os.path.exists(audio_path):
-            print(f'[{file_index:3d}/{total_files}] ❌ File not found: {audio_path}')
-            return
-        
-        file_start_time = datetime.now()
-        print(f'[{file_index:3d}/{total_files}] Processing: {audio_path}')
-        
-        # Определяем длительность
-        try:
-            audio = AudioSegment.from_file(audio_path)
-            duration = len(audio) / 1000.0
-            print(f'    Duration: {self._format_time(duration)}')
-        except Exception as e:
-            print(f'    ⚠️ Could not read duration: {e}')
-            duration = 0
-        
-        # Пути к выходным файлам
-        dirname = os.path.dirname(audio_path)
-        basename = os.path.basename(audio_path)
-        name_noext = os.path.splitext(basename)[0]
-        
-        timecode_file = os.path.join(dirname, name_noext + '_timecodes.txt')
-        rawtext_file = os.path.join(dirname, name_noext + '_raw.txt')
-        
-        try:
-            # Подготовка параметров для faster-whisper
-            transcribe_kwargs = {
-                "beam_size": self.config.beam_size,
-                "language": self.config.text_language,
-                "initial_prompt": self.config.initial_prompt,
-                "temperature": self.config.temperature,
-                "compression_ratio_threshold": self.config.compression_ratio_threshold,
-                "log_prob_threshold": self.config.logprob_threshold,
-                "no_speech_threshold": self.config.no_speech_threshold,
-                "condition_on_prev_tokens": self.config.condition_on_prev_tokens,
-                "patience": self.config.patience,
-                "length_penalty": self.config.length_penalty,
-                "suppress_blank": self.config.suppress_blank,
-                "suppress_tokens": self.config.suppress_tokens,
-                "without_timestamps": self.config.without_timestamps,
-                "max_initial_timestamp": self.config.max_initial_timestamp,
-            }
-            # Удаляем ключи со значением None
-            transcribe_kwargs = {k: v for k, v in transcribe_kwargs.items() if v is not None}
-            
-            print(f"    Starting transcription with faster-whisper (model: {self.config.whisper_model})...")
-            segments, info = self.model.transcribe(audio_path, **transcribe_kwargs)
-            print(f"    Detected language: {info.language} (prob: {info.language_probability:.2f})")
-            if duration > 0:
-                self._print_progress_bar(0, duration)
-            else:
-                print("    Transcribing... (duration unknown)")
-            
-            full_text = []
-            with open(timecode_file, 'w', encoding='UTF-8') as f:
-                for segment in segments:
-                    start = segment.start
-                    end = segment.end
-                    text = segment.text.strip()
-                    hh, mm, ss = int(start // 3600), int((start % 3600) // 60), int(start % 60)
-                    f.write(f"[{hh:02d}:{mm:02d}:{ss:02d}] {text}\n")
-                    full_text.append(text)
-                    if duration > 0:
-                        self._print_progress_bar(end, duration)
-            
-            if duration > 0:
-                self._print_progress_bar(duration, duration)
-            print()
-            
-            # Сохраняем сырой текст
-            self._save_text_files(full_text, rawtext_file)
-            
-            print(f'✅ Done in {datetime.now() - file_start_time}')
-        
-        except Exception as e:
-            print(f'\n❌ Error processing {audio_path}: {e}')
-            # Записываем ошибку в файл
-            error_file_path = os.path.join(dirname, name_noext + '_ERROR.txt')
-            with open(error_file_path, 'w', encoding='UTF-8') as ef:
+            with open(self.current_error_file, 'w', encoding='UTF-8') as ef:
                 ef.write(f"Error processing {audio_path}: {e}\n")
     
     def _save_text_files(self, full_text, rawtext_file):
         """Сохранение текстовых файлов"""
+
         # Сохраняем сырой текст
         rawtext = ' '.join(full_text)
         rawtext = re.sub(r" +", " ", rawtext)
@@ -420,9 +322,14 @@ class AudioProcessor:
         m = int((seconds % 3600) // 60)
         s = int(seconds % 60)
         return f"{h:02d}:{m:02d}:{s:02d}"
-    
+
+    @staticmethod
+    def _format_elapsed_time(elapsed_time):
+        """Форматирование времени выполнения без дробной части секунд"""
+        return str(elapsed_time).split('.')[0]
+
     def _print_progress_bar(self, current, total, bar_length=30):
-        """Вывод прогресс-бара"""
+        """Вывод прогресс-бара после кодирования файла (лишнего) """
         if total <= 0:
             return
         fraction = current / total
@@ -436,13 +343,25 @@ class AudioProcessor:
         ext = filename.lower().split('.')[-1]
         return ext in extensions
 
-
 class AudioTranscriber:
     """Основной класс приложения для транскрипции аудио"""
+
+    def _print_copyright(self):
+        """Вывод информации о копирайте"""
+        print("=" * 50)
+        print("Audio Transcriber v1.0")
+        print("Based on OpenAI Whisper")
+        print()
+        print("(c) Karel Wintersky, 2025.")
+        print("https://github.com/KarelWintersky/SST_Whisper")
+        print("=" * 50)
+        print()
     
     def __init__(self):
+        self._print_copyright()
         self.config = ConfigParser()
         self.processor = AudioProcessor(self.config)
+
     
     def run(self):
         """Запуск приложения"""
