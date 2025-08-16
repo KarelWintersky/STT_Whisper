@@ -12,17 +12,14 @@ See [Whisper](https://github.com/openai/whisper) dependencies and installation i
 ```
 pip install -U openai-whisper
 ``` 
-# OR
+OR
 ```
 pip install git+https://github.com/openai/whisper.git
 ```
-
-# OR, UPDATE
-
+OR, UPDATE
 ```
 pip install --upgrade --no-deps --force-reinstall git+https://github.com/openai/whisper.git
 ``` 
-
 
 # ToDo
 
