@@ -3,11 +3,17 @@
 
 import os
 import re
+import sys
 import configparser
 import torch
+import signal
+import logging
 from datetime import datetime
 from pydub import AudioSegment
 from pathlib import Path
+# from concurrent.futures import ThreadPoolExecutor, as_completed
+# from colorama import init, Fore, Style
+# print(f"{Fore.RED}❌ Required parameters missing in settings.ini:{Style.RESET_ALL}")
 
 class ConfigParser:
     """Класс для парсинга конфигурации"""
@@ -21,16 +27,27 @@ class ConfigParser:
         """Парсинг конфигурации"""
         # Основные параметры
         self.audio_folder           = self.config["OPTIONS"]["sources_dir"]
-        self.engine_name            = self.config["OPTIONS"]["transcribe_engine"].strip()
-        self.whisper_model          = self.config["OPTIONS"]["whisper_model"]
+        self.engine_name            = self.config["OPTIONS"].get("transcribe_engine", "").strip()
+        self.whisper_model          = self.config["OPTIONS"].get("whisper_model", "").strip()
         self.text_language          = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
         self.text_language          = self.text_language if self.text_language else None
         self.model_path             = self.config["OPTIONS"].get("model_path", "./models/").strip()
         self.skip_transcoded_files  = self._parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"), default=False)
+#        self.enable_logging         = self.config["OPTIONS"].get("logging", "0") == "1"
+#        self.decode_to_wav          = self.config["OPTIONS"].get("decode_to_wav", "0") == "1"
+#        self.use_cuda               = self.config["OPTIONS"].get("use_cuda", "1") == "1"
+#        self.max_workers = int(config["OPTIONS"].get("max_workers", "1"))
+
+        if not self.engine_name or not self.whisper_model:
+            print("❌ Required parameters missing in settings.ini:")
+            print("   - transcribe_engine (faster-whisper or openai-whisper)")
+            print("   - whisper_model (tiny, base, small, medium, large)")
+            print("\nUsage: python3 {os.path.basename(sys.argv[0])} [audio_folder_path]")
+            sys.exit(1)
         
         # Параметры транскрипции
         self._parse_transcribe_params()
-    
+
     def _parse_transcribe_params(self):
         """Парсинг параметров транскрипции"""
         transcribe_section = self.config["TRANSCRIBE"]
@@ -404,6 +421,16 @@ class AudioTranscriber:
             print("💻 CUDA disabled: using CPU only")
         print()
 
+    def setup_logging(enabled):
+        """Настройка логирования"""
+        if enabled:
+            logging.basicConfig(
+                filename='transcription.log',
+                level=logging.INFO,
+                format='%(asctime)s - %(message)s',
+                datefmt='%Y-%m-%d %H:%M:%S'
+            )
+
     def __init__(self):
         self._print_copyright()
         self._print_gpu_info()
@@ -419,12 +446,22 @@ class AudioTranscriber:
             return False
         return True
 
+# Глобальная переменная для отслеживания прерывания
+shutdown_requested = False
 
 def main():
     """Основная функция"""
     app = AudioTranscriber()
     app.run()
 
+def signal_handler(sig, frame):
+    global shutdown_requested
+    print('\n\n⚠️ Shutdown requested. Finishing current tasks...')
+    shutdown_requested = True
 
+# Регистрация обработчика сигнала Ctrl+C
+# signal.signal(signal.SIGINT, signal_handler)
+
+# .entrypoint
 if __name__ == '__main__':
     main()
