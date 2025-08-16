@@ -191,6 +191,64 @@ class Helper:
 
 # --------------------------------------------------------------------------------------------- #
 
+class SSTLogger:
+    """Класс для логгирования операций транскрипции"""
+
+    def __init__(self, enable_logging=False):
+        self.enable_logging = enable_logging
+        if self.enable_logging:
+            self._setup_logging()
+
+    def _setup_logging(self):
+        """Настройка логгирования"""
+        logging.basicConfig(
+            filename='transcription.log',
+            level=logging.INFO,
+            format='%(asctime)s - %(message)s',
+            datefmt='%Y-%m-%d %H:%M:%S',
+            encoding='utf-8'
+        )
+
+    def log_message(self, message):
+        """Логгирование сообщения"""
+        if self.enable_logging:
+            logging.info(message)
+
+    def log_session_start(self, engine_name, model_name, device):
+        """Логгирование информации о начале сессии"""
+        if self.enable_logging:
+            # Получаем информацию о GPU если используется CUDA
+            if device == "cuda" and torch.cuda.is_available():
+                gpu_info = f"{torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})"
+            else:
+                gpu_info = "None"
+
+            session_info = f"""
+        SESSION STARTED
+          Engine: {engine_name}
+          Model: {model_name}
+          Device: {device}
+          GPU: {gpu_info}
+          CUDA available: {torch.cuda.is_available()}
+        """
+            self.log_message(session_info.strip())
+
+    def log_session_summary(self, processed_files_count, successful_files_count, failed_files_count, total_duration, total_processing_time, session_time):
+        """Логгирование итоговой статистики сессии"""
+        if self.enable_logging and processed_files_count > 0:
+            speed_ratio = total_duration / total_processing_time if total_processing_time > 0 else 0
+            summary = f"""
+    SESSION SUMMARY:
+      Files processed: {processed_files_count} (Success: {successful_files_count}, Failed: {failed_files_count})
+      Total audio duration: {Helper.format_time(total_duration)}
+      Total processing time: {Helper.format_time(total_processing_time)}
+      Session time: {Helper.format_time(session_time)}
+      Overall speed ratio: {speed_ratio:.2f}x
+    """
+            self.log_message(summary.strip())
+
+# --------------------------------------------------------------------------------------------- #
+
 class ConfigParser:
     """Класс для парсинга конфигурации"""
     
@@ -205,16 +263,16 @@ class ConfigParser:
         self.audio_folder           = self.config["OPTIONS"]["sources_dir"]
         self.engine_name            = self.config["OPTIONS"].get("transcribe_engine", "openai-whisper").strip()
         self.whisper_model          = self.config["OPTIONS"].get("whisper_model", "tiny").strip()
-        self.use_cuda = Helper.parse_bool(self.config["OPTIONS"].get("use_cuda", "1"), default=True)
         self.text_language          = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
         self.text_language          = self.text_language if self.text_language else None
         self.model_path             = self.config["OPTIONS"].get("model_path", "./models/").strip()
         self.skip_transcoded_files  = Helper.parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"), default=False)
+        self.use_cuda               = Helper.parse_bool(self.config["OPTIONS"].get("use_cuda", "1"), default=True)
 
         self.export_srt_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_srt_file"), default=False)
         self.export_raw_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_raw_file"), default=False)
 
-        self.enable_logging = Helper.parse_bool(self.config["OPTIONS"].get("logging", "0"), default=False)
+        self.enable_logging         = Helper.parse_bool(self.config["OPTIONS"].get("logging", "0"), default=False)
 
 #        self.decode_to_wav          = self.config["OPTIONS"].get("decode_to_wav", "0") == "1"
 #        self.max_workers            = int(config["OPTIONS"].get("max_workers", "1"))
@@ -287,24 +345,8 @@ class AudioProcessor:
         self.current_error_file = None
         self.current_srt_file = None
 
-        # Настройка логгирования
-        if self.config.enable_logging:
-            self._setup_logging()
-
-    def _setup_logging(self):
-        """Настройка логгирования"""
-        logging.basicConfig(
-            filename='transcription.log',
-            level=logging.INFO,
-            format='%(asctime)s - %(message)s',
-            datefmt='%Y-%m-%d %H:%M:%S',
-            encoding='utf-8'
-        )
-
-    def _log_message(self, message):
-        """Логгирование сообщения"""
-        if self.config.enable_logging:
-            logging.info(message)
+        # Инициализация логгера
+        self.logger = SSTLogger(self.config.enable_logging)
 
     def _setup_file_paths(self, audio_path):
         """Настройка путей для текущего аудиофайла"""
@@ -351,7 +393,7 @@ class AudioProcessor:
             raise ValueError(f"Unknown transcribe_engine: '{engine_name}'. Use 'openai-whisper'.")
 
         print('✅ Model loaded.\n')
-        self._log_session_start(engine_name, whisper_model, device)
+        self.logger.log_session_start(engine_name, whisper_model, device)
 
     def should_skip_file(self, audio_path):
         """Проверка, нужно ли пропускать файл"""
@@ -516,7 +558,8 @@ class AudioProcessor:
 
             # Логгируем успешную обработку
             speed_ratio = processing_time / duration if duration > 0 else 0
-            self._log_message(f"SUCCESS: {audio_path} | Size: {filesize} bytes | Duration: {Helper.format_time(duration)} | Time: {Helper.format_time(processing_time)} | Speed: {speed_ratio:.2f}x")
+            self.logger.log_message(
+                f"SUCCESS: {audio_path} | Size: {filesize} bytes | Duration: {Helper.format_time(duration)} | Time: {Helper.format_time(processing_time)} | Speed: {speed_ratio:.2f}x")
 
             print(f'✅ Done in {Helper.format_elapsed_time(datetime.now() - file_start_time)}')
             print()
@@ -532,43 +575,22 @@ class AudioProcessor:
             self.failed_files_count += 1
 
             # Логгируем ошибку
-            self._log_message(f"ERROR: {audio_path} | Size: {filesize} bytes | Duration: {Helper.format_time(duration)} | Error: {str(e)}")
-
-    def _log_session_start(self, engine_name, model_name, device):
-        """Логгирование информации о начале сессии"""
-        if self.config.enable_logging:
-            # Получаем информацию о GPU если используется CUDA
-            if device == "cuda" and torch.cuda.is_available():
-                gpu_info = f"{torch.cuda.get_device_name(0)} (CUDA {torch.version.cuda})"
-            else:
-                gpu_info = "None"
-
-            session_info = f"""
-        SESSION STARTED
-          Engine: {engine_name}
-          Model: {model_name}
-          Device: {device}
-          GPU: {gpu_info}
-          CUDA available: {torch.cuda.is_available()}
-        """
-            self._log_message(session_info.strip())
-
+            self.logger.log_message(
+                f"ERROR: {audio_path} | Size: {filesize} bytes | Duration: {Helper.format_time(duration)} | Error: {str(e)}")
 
     def _log_session_summary(self):
         """Логгирование итоговой статистики сессии"""
         if self.config.enable_logging and self.processed_files_count > 0:
             speed_ratio = self.total_duration / self.total_processing_time if self.total_processing_time > 0 else 0
             session_time = (datetime.now() - self.start_time).total_seconds()
-
-            summary = f"""
-    SESSION SUMMARY:
-      Files processed: {self.processed_files_count} (Success: {self.successful_files_count}, Failed: {self.failed_files_count})
-      Total audio duration: {Helper.format_time(self.total_duration)}
-      Total processing time: {Helper.format_time(self.total_processing_time)}
-      Session time: {Helper.format_time(session_time)}
-      Overall speed ratio: {speed_ratio:.2f}x
-    """
-            self._log_message(summary.strip())
+            self.logger.log_session_summary(
+                self.processed_files_count,
+                self.successful_files_count,
+                self.failed_files_count,
+                self.total_duration,
+                self.total_processing_time,
+                session_time
+            )
 
 
 # --------------------------------------------------------------------------------------------- #
