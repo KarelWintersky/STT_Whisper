@@ -11,9 +11,6 @@ import logging
 from datetime import datetime
 from pydub import AudioSegment
 from pathlib import Path
-# from concurrent.futures import ThreadPoolExecutor, as_completed
-# from colorama import init, Fore, Style
-# print(f"{Fore.RED}❌ Required parameters missing in settings.ini:{Style.RESET_ALL}")
 
 class ConfigParser:
     """Класс для парсинга конфигурации"""
@@ -187,7 +184,6 @@ class AudioProcessor:
 
     def should_skip_file(self, audio_path):
         """Проверка, нужно ли пропускать файл"""
-        # Если опция отключена, не пропускаем файлы
         if not self.config.skip_transcoded_files:
             return False
 
@@ -277,7 +273,7 @@ class AudioProcessor:
 
         print(f'[{file_index:3d}/{total_files}] Processing: {self.current_relative_path}')
 
-        # Проверка на пропуск уже обработанных файлов (экспериментальная)
+        # Проверка на пропуск уже обработанных файлов
         if self.should_skip_file(audio_path):
             print(f'[{file_index:3d}/{total_files}] ⏭️ Skipping (already processed)')
             print()
