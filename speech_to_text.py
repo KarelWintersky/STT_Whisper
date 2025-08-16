@@ -354,7 +354,7 @@ class AudioProcessor:
         self.current_dirname = os.path.dirname(audio_path)
         self.current_basename = os.path.basename(audio_path)
         self.current_name_noext = os.path.splitext(self.current_basename)[0]
-        self.current_relative_path = Path(audio_path).relative_to(self.current_dirname)
+        self.current_relative_path = Path(audio_path).relative_to(self.config.audio_folder)
 
         self.current_timecode_file = os.path.join(self.current_dirname, self.current_name_noext + '_timecodes.txt')
         self.current_rawtext_file = os.path.join(self.current_dirname, self.current_name_noext + '_raw.txt')
