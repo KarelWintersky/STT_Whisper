@@ -140,8 +140,13 @@ class AudioProcessor:
         self.audio_exts = ['mp3', 'aac', 'ogg', 'wav', 'opus', 'flac', 'm4a', 'wma', 'aiff', 'amr']
         self.model = None
         self.start_time = None
-        
-         # Поля для хранения путей текущего файла
+
+        # Статистика
+        self.total_duration = 0.0
+        self.total_processing_time = 0.0
+        self.processed_files_count = 0
+
+        # Поля для хранения путей текущего файла
         self.current_audio_path = None
         self.current_dirname = None
         self.current_basename = None
@@ -257,6 +262,7 @@ class AudioProcessor:
         
         print('✅ All files processed.')
         print(f'✅ Total time: {self._format_elapsed_time(datetime.now() - self.start_time)}')
+        self._print_total_stats()
         print()
    
     def _process_audiofile_openai_whisper(self, audio_path, file_index, total_files):
@@ -339,7 +345,13 @@ class AudioProcessor:
             
             # Сохраняем сырой текст
             self._save_text_files(full_text, self.current_rawtext_file)
-            
+
+            # Обновляем статистику
+            processing_time = (datetime.now() - file_start_time).total_seconds()
+            self.total_duration += duration
+            self.total_processing_time += processing_time
+            self.processed_files_count += 1
+
             print(f'✅ Done in {self._format_elapsed_time(datetime.now() - file_start_time)}')
             print()
         
@@ -393,6 +405,18 @@ class AudioProcessor:
         ext = filename.lower().split('.')[-1]
         return ext in extensions
 
+    def _print_total_stats(self):
+        """Вывод суммарной статистики"""
+        if self.processed_files_count > 0:
+            speed_ratio = self.total_duration / self.total_processing_time if self.total_processing_time > 0 else 0
+            print(f"\n📊 Total statistics:")
+            print(f"  🕐 Audio duration: {self._format_time(self.total_duration)}")
+            print(f"  ⏱️ Processing time: {self._format_time(self.total_processing_time)}")
+            print(f"  ⚡ Speed ratio: {speed_ratio:.2f}x")
+        else:
+            print("\nNo files were processed.")
+
+
 class AudioTranscriber:
     """Основной класс приложения для транскрипции аудио"""
 
@@ -442,13 +466,16 @@ class AudioTranscriber:
             return False
         return True
 
+
 # Глобальная переменная для отслеживания прерывания
 shutdown_requested = False
+
 
 def main():
     """Основная функция"""
     app = AudioTranscriber()
     app.run()
+
 
 def signal_handler(sig, frame):
     global shutdown_requested
@@ -461,3 +488,5 @@ def signal_handler(sig, frame):
 # .entrypoint
 if __name__ == '__main__':
     main()
+
+# -eof- #
