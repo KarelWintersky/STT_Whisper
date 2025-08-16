@@ -4,9 +4,9 @@
 import os
 import re
 import configparser
+import torch
 from datetime import datetime
 from pydub import AudioSegment
-import torch
 from pathlib import Path
 
 class ConfigParser:
@@ -20,12 +20,13 @@ class ConfigParser:
     def _parse_config(self):
         """Парсинг конфигурации"""
         # Основные параметры
-        self.audio_folder = self.config["OPTIONS"]["sources_dir"]
-        self.engine_name = self.config["OPTIONS"]["transcribe_engine"].strip()
-        self.whisper_model = self.config["OPTIONS"]["whisper_model"]
-        self.text_language = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
-        self.text_language = self.text_language if self.text_language else None
-        self.model_path = self.config["OPTIONS"].get("model_path", "./models/").strip()
+        self.audio_folder           = self.config["OPTIONS"]["sources_dir"]
+        self.engine_name            = self.config["OPTIONS"]["transcribe_engine"].strip()
+        self.whisper_model          = self.config["OPTIONS"]["whisper_model"]
+        self.text_language          = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
+        self.text_language          = self.text_language if self.text_language else None
+        self.model_path             = self.config["OPTIONS"].get("model_path", "./models/").strip()
+        self.skip_transcoded_files  = self._parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"), default=False)
         
         # Параметры транскрипции
         self._parse_transcribe_params()
@@ -167,6 +168,29 @@ class AudioProcessor:
         
         print('✅ Model loaded.\n')
 
+    def should_skip_file(self, audio_path):
+        """Проверка, нужно ли пропускать файл"""
+        # Если опция отключена, не пропускаем файлы
+        if not self.config.skip_transcoded_files:
+            return False
+
+        # Проверяем существование выходных файлов
+        if os.path.exists(self.current_timecode_file) and os.path.exists(self.current_rawtext_file):
+            # Проверяем, что выходные файлы новее исходного
+            try:
+                audio_mtime = os.path.getmtime(audio_path)
+                timecode_mtime = os.path.getmtime(self.current_timecode_file)
+                rawtext_mtime = os.path.getmtime(self.current_rawtext_file)
+
+                # Файл можно пропустить, если оба выходных файла новее входного
+                if timecode_mtime > audio_mtime and rawtext_mtime > audio_mtime:
+                    return True
+            except OSError:
+                # Если возникла ошибка при получении времени модификации, не пропускаем файл
+                return False
+
+        return False
+
     def find_audio_files(self):
         """Поиск аудиофайлов в указанной директории"""
         audio_folder = self.config.audio_folder
@@ -184,7 +208,21 @@ class AudioProcessor:
                     audio_files.append(full_path)
         
         return audio_files
-    
+
+    def get_file_info(self, audio_path):
+        """Получение информации о файле: размер и длительность"""
+        file_size = os.path.getsize(audio_path)
+
+        try:
+            audio = AudioSegment.from_file(audio_path)
+            duration = len(audio) / 1000.0
+            print(f'    Duration: {self._format_time(duration)}')
+        except Exception:
+            print(f'    ⚠️ Could not read duration: {audio_path}')
+            duration = 0
+
+        return file_size, duration
+
     def process_all_files(self):
         """Обработка всех аудиофайлов"""
         self.start_time = datetime.now()
@@ -195,7 +233,7 @@ class AudioProcessor:
             print('No audio files found to process.')
             return
         
-        print(f'Found {total_files} audio file(s) to process.\n')
+        print(f'✅ Found {total_files} audio file(s) to process.\n')
         
         # Инициализируем движок и загружаем модель
         self.initialize_engine()
@@ -221,15 +259,15 @@ class AudioProcessor:
         self._setup_file_paths(audio_path)
 
         print(f'[{file_index:3d}/{total_files}] Processing: {self.current_relative_path}')
-        
+
+        # Проверка на пропуск уже обработанных файлов (экспериментальная)
+        if self.should_skip_file(audio_path):
+            print(f'[{file_index:3d}/{total_files}] ⏭️ Skipping (already processed)')
+            print()
+            return
+
         # Определяем длительность
-        try:
-            audio = AudioSegment.from_file(audio_path)
-            duration = len(audio) / 1000.0
-            print(f'    Duration: {self._format_time(duration)}')
-        except Exception as e:
-            print(f'    ⚠️ Could not read duration: {e}')
-            duration = 0
+        filesize, duration = self.get_file_info(audio_path)
 
         try:
             # Подготовка параметров для openai-whisper
@@ -289,7 +327,6 @@ class AudioProcessor:
             # Сохраняем сырой текст
             self._save_text_files(full_text, self.current_rawtext_file)
             
-            # print(f'✅ Done in {datetime.now() - file_start_time}')
             print(f'✅ Done in {self._format_elapsed_time(datetime.now() - file_start_time)}')
             print()
         
@@ -351,18 +388,28 @@ class AudioTranscriber:
         print("=" * 50)
         print("Audio Transcriber v1.0")
         print("Based on OpenAI Whisper")
-        print()
-        print("(c) Karel Wintersky, 2025.")
-        print("https://github.com/KarelWintersky/SST_Whisper")
         print("=" * 50)
         print()
-    
+
+    def _print_gpu_info(self):
+        """Вывод информации о видеокарте и режиме CUDA"""
+        if torch.cuda.is_available():
+            gpu_name = torch.cuda.get_device_name(0)
+            gpu_count = torch.cuda.device_count()
+            print(f"🚀 CUDA enabled: {gpu_count} GPU(s) available")
+            print(f"   GPU: {gpu_name}")
+            print(f"   CUDA version: {torch.version.cuda}")
+#            print(f"   CUDA architecture: {torch.cuda.get_arch_list()}")
+        else:
+            print("💻 CUDA disabled: using CPU only")
+        print()
+
     def __init__(self):
         self._print_copyright()
+        self._print_gpu_info()
         self.config = ConfigParser()
         self.processor = AudioProcessor(self.config)
 
-    
     def run(self):
         """Запуск приложения"""
         try:
