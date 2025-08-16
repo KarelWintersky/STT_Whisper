@@ -490,7 +490,8 @@ class AudioProcessor:
 
         # Проверка на пропуск уже обработанных файлов
         if self.should_skip_file(audio_path):
-            print(f'[{file_index:3d}/{total_files}] ⏭️ Skipping (already processed)')
+            # print(f'[{file_index:3d}/{total_files}] ⏭️ Skipping (already processed)')
+            print(" " * 9 + f'⏭️ Skipping (already processed)')
             print()
             return
 

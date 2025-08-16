@@ -1,5 +1,7 @@
 .idea
 models
+sources
+test
 __pycache__
 
 transcription.log

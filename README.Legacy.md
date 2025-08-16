@@ -1,7 +1,5 @@
 # С чего всё начиналось?
 
-
-
 ```python
 #!/usr/bin/python3
 # Install dependencies:
