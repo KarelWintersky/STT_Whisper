@@ -6,11 +6,14 @@ import re
 import sys
 import configparser
 import torch
+import warnings
 import signal
 import logging
 from datetime import datetime
 from pydub import AudioSegment
 from pathlib import Path
+
+# --------------------------------------------------------------------------------------------- #
 
 class Helper:
     """Вспомогательный класс с утилитарными методами"""
@@ -203,12 +206,14 @@ class ConfigParser:
         self.text_language          = self.text_language if self.text_language else None
         self.model_path             = self.config["OPTIONS"].get("model_path", "./models/").strip()
         self.skip_transcoded_files  = Helper.parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"), default=False)
+
         self.export_srt_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_srt_file"), default=False)
         self.export_raw_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_raw_file"), default=False)
 
+        self.use_cuda               = Helper.parse_bool(self.config["OPTIONS"].get("use_cuda", "1"), default=True)
+
 #        self.enable_logging         = self.config["OPTIONS"].get("logging", "0") == "1"
 #        self.decode_to_wav          = self.config["OPTIONS"].get("decode_to_wav", "0") == "1"
-#        self.use_cuda               = self.config["OPTIONS"].get("use_cuda", "1") == "1"
 #        self.max_workers            = int(config["OPTIONS"].get("max_workers", "1"))
 
         if not self.engine_name or not self.whisper_model:
@@ -295,18 +300,32 @@ class AudioProcessor:
         engine_name = self.config.engine_name
         whisper_model = self.config.whisper_model
         model_path = os.path.join(self.config.model_path, "openai-whisper")
-        
+
+        # Определяем устройство для обработки
+        if self.config.use_cuda and torch.cuda.is_available():
+            device = "cuda"
+            print("🚀 Using CUDA for processing")
+        else:
+            device = "cpu"
+            self.config.fp16 = False
+            if self.config.use_cuda:
+                print("⚠️  CUDA enabled in config but not available, using CPU")
+            else:
+                print("💻 Using CPU for processing")
+
+        print()
+
         if engine_name == "openai-whisper":
             import whisper
             print(f'Loading model: "{whisper_model}" using engine: {engine_name}...')
             self.model = whisper.load_model(
                 whisper_model,
-                device="cuda" if torch.cuda.is_available() else "cpu",
+                device=device,
                 download_root=model_path
             )
         else:
             raise ValueError(f"Unknown transcribe_engine: '{engine_name}'. Use 'openai-whisper'.")
-        
+
         print('✅ Model loaded.\n')
 
     def should_skip_file(self, audio_path):
@@ -521,6 +540,9 @@ class AudioTranscriber:
 
     def run(self):
         """Запуск приложения"""
+
+        warnings.filterwarnings("ignore", message="Performing inference on CPU when CUDA is available")
+
         try:
             self.processor.process_all_files()
         except Exception as e:
