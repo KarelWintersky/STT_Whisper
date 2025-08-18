@@ -254,7 +254,7 @@ class ConfigParser:
     
     def __init__(self, config_path="settings.ini"):
         self.config = configparser.ConfigParser()
-        self.config.read(config_path)
+        self.config.read(config_path, encoding='utf-8')
         self._parse_config()
     
     def _parse_config(self):
