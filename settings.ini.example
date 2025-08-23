@@ -3,7 +3,7 @@
 ; Audio files in this folder will be processed
 ; Обрабатывать файлы (включая подкаталоги) в этом каталоге
 ; sources_dir = c:\AI\SST_Whisper\sources
-sources_dir = /var/www.upkeep/SST_Whisper/sources/
+sources_dir = /var/www.upkeep/STT_Whisper/sources/
 
 ; Use model
 ; Используемая модель
