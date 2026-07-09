@@ -28,8 +28,10 @@
 pip install torch torchaudio
 pip install openai-whisper
 pip install pydub
-pip install numpy
+pip install 'numpy<2.5'
 ```
+
+> ⚠️ Numba (зависимость Whisper) требует NumPy < 2.5. Если после обновления системы получили ошибку `Numba needs NumPy 2.4 or less` — откатите NumPy: `pip install 'numpy<2.5' --break-system-packages`.
 
 > ⚠️ Для работы с CUDA убедитесь, что у вас установлена совместимая версия `torch` с поддержкой CUDA.
 
@@ -38,11 +40,11 @@ pip install numpy
 ## 📁 Структура проекта
 
 ```
-audio_transcriber/
-├── audio_transcriber.py     # Основной скрипт
-├── settings.ini             # Конфигурационный файл
-├── models/                  # Папка для моделей Whisper (создаётся автоматически)
-└── sources/                 # Папка с аудиофайлами (по умолчанию)
+speech_to_text.py          # Основной скрипт
+settings.ini               # Конфигурационный файл
+settings_badwords.ini      # Файл с паттернами нежелательных слов
+models/                    # Папка для моделей Whisper (создаётся автоматически)
+sources/                   # Папка с аудиофайлами (по умолчанию)
 ```
 
 ---
@@ -53,7 +55,8 @@ audio_transcriber/
 
 ```ini
 [OPTIONS]
-sources_dir = sources/
+sources_dir = ./sources/
+badwords_file = ./settings_badwords.ini
 transcribe_engine = openai-whisper
 whisper_model = base
 force_transcribe_language = ru
@@ -87,8 +90,9 @@ temperature_increment_on_fallback = 0.2
 | Параметр                     | Описание |
 |-----------------------------|----------|
 | `sources_dir`               | Путь к папке с аудиофайлами |
+| `badwords_file`             | Путь к файлу с паттернами нежелательных слов (regex) |
 | `transcribe_engine`         | Движок транскрипции (`openai-whisper`) |
-| `whisper_model`             | Модель Whisper: `tiny`, `base`, `small`, `medium`, `large` |
+| `whisper_model`             | Модель Whisper: `tiny`, `tiny.en`, `base`, `base.en`, `small`, `small.en`, `medium`, `medium.en`, `large`, `large-v1`, `large-v2`, `large-v3`, `turbo` |
 | `force_transcribe_language` | Язык транскрипции (например, `ru`, `en`). Оставьте пустым для автоопределения |
 | `model_path`                | Путь к папке с моделями |
 | `skip_transcoded_files`     | Пропускать уже обработанные файлы |
@@ -106,7 +110,7 @@ temperature_increment_on_fallback = 0.2
 ## ▶️ Запуск
 
 ```bash
-python3 audio_transcriber.py
+python3 speech_to_text.py
 ```
 
 ---

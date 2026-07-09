@@ -1,7 +1,14 @@
 [OPTIONS]
 
+badwords_file = ./settings_badwords.ini
+; или полный путь: /home/user/myproject/settings_badwords.ini
+
 ; Audio files in this folder will be processed
 ; Обрабатывать файлы (включая подкаталоги) в этом каталоге
+;   sources_dir = ./sources
+;   sources_dir = ../audio
+;   sources_dir = /mnt/nas/audio
+;   sources_dir = C:\Users\user\audio
 ; sources_dir = c:\AI\SST_Whisper\sources
 sources_dir = /var/www.upkeep/STT_Whisper/sources/
 
