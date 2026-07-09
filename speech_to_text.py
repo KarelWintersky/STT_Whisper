@@ -16,6 +16,7 @@ from pathlib import Path
 # Подавляем предупреждение от whisper
 warnings.filterwarnings("ignore", message="Performing inference on CPU when CUDA is available")
 
+
 # ------------------------------------------------------------------------- #
 
 class Helper:
@@ -129,7 +130,8 @@ class Helper:
         fraction = current / total
         filled = int(bar_length * fraction)
         bar = '█' * filled + '░' * (bar_length - filled)
-        print(f'\r    Progress: |{bar}| {fraction:.1%} ({Helper.format_time(current)}/{Helper.format_time(total)})', end='', flush=True)
+        print(f'\r    Progress: |{bar}| {fraction:.1%} ({Helper.format_time(current)}/{Helper.format_time(total)})',
+              end='', flush=True)
 
     @staticmethod
     def save_timecode_file(result, timecode_file):
@@ -189,6 +191,7 @@ class Helper:
         except Exception as e:
             print(f"    ⚠️ Error exporting SRT: {e}")
 
+
 # --------------------------------------------------------------------------------------------- #
 
 class SSTLogger:
@@ -233,7 +236,8 @@ class SSTLogger:
         """
             self.log_message(session_info.strip())
 
-    def log_session_summary(self, processed_files_count, successful_files_count, failed_files_count, total_duration, total_processing_time, session_time):
+    def log_session_summary(self, processed_files_count, successful_files_count, failed_files_count, total_duration,
+                            total_processing_time, session_time):
         """Логгирование итоговой статистики сессии"""
         if self.enable_logging and processed_files_count > 0:
             speed_ratio = total_duration / total_processing_time if total_processing_time > 0 else 0
@@ -247,35 +251,37 @@ class SSTLogger:
     """
             self.log_message(summary.strip())
 
+
 # --------------------------------------------------------------------------------------------- #
 
 class ConfigParser:
     """Класс для парсинга конфигурации"""
-    
+
     def __init__(self, config_path="settings.ini"):
         self.config = configparser.ConfigParser()
         self.config.read(config_path, encoding='utf-8')
         self._parse_config()
-    
+
     def _parse_config(self):
         """Парсинг конфигурации"""
         # Основные параметры
-        self.audio_folder           = self.config["OPTIONS"]["sources_dir"]
-        self.engine_name            = self.config["OPTIONS"].get("transcribe_engine", "openai-whisper").strip()
-        self.whisper_model          = self.config["OPTIONS"].get("whisper_model", "tiny").strip()
-        self.text_language          = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
-        self.text_language          = self.text_language if self.text_language else None
-        self.model_path             = self.config["OPTIONS"].get("model_path", "./models/").strip()
-        self.skip_transcoded_files  = Helper.parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"), default=False)
-        self.use_cuda               = Helper.parse_bool(self.config["OPTIONS"].get("use_cuda", "1"), default=True)
+        self.audio_folder = self.config["OPTIONS"]["sources_dir"]
+        self.engine_name = self.config["OPTIONS"].get("transcribe_engine", "openai-whisper").strip()
+        self.whisper_model = self.config["OPTIONS"].get("whisper_model", "tiny").strip()
+        self.text_language = self.config["OPTIONS"].get("force_transcribe_language", "").strip()
+        self.text_language = self.text_language if self.text_language else None
+        self.model_path = self.config["OPTIONS"].get("model_path", "./models/").strip()
+        self.skip_transcoded_files = Helper.parse_bool(self.config["OPTIONS"].get("skip_transcoded_files"),
+                                                       default=False)
+        self.use_cuda = Helper.parse_bool(self.config["OPTIONS"].get("use_cuda", "1"), default=True)
 
-        self.export_srt_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_srt_file"), default=False)
-        self.export_raw_file        = Helper.parse_bool(self.config["OPTIONS"].get("export_raw_file"), default=False)
+        self.export_srt_file = Helper.parse_bool(self.config["OPTIONS"].get("export_srt_file"), default=False)
+        self.export_raw_file = Helper.parse_bool(self.config["OPTIONS"].get("export_raw_file"), default=False)
 
-        self.enable_logging         = Helper.parse_bool(self.config["OPTIONS"].get("logging", "0"), default=False)
+        self.enable_logging = Helper.parse_bool(self.config["OPTIONS"].get("logging", "0"), default=False)
 
-#        self.decode_to_wav          = self.config["OPTIONS"].get("decode_to_wav", "0") == "1"
-#        self.max_workers            = int(config["OPTIONS"].get("max_workers", "1"))
+        #        self.decode_to_wav          = self.config["OPTIONS"].get("decode_to_wav", "0") == "1"
+        #        self.max_workers            = int(config["OPTIONS"].get("max_workers", "1"))
 
         if not self.engine_name or not self.whisper_model:
             print("❌ Required parameters missing in settings.ini:")
@@ -283,44 +289,48 @@ class ConfigParser:
             print("   - whisper_model (tiny, base, small, medium, large)")
             print("\nUsage: python3 {os.path.basename(sys.argv[0])}")
             sys.exit(1)
-        
+
         # Параметры транскрипции
         self._parse_transcribe_params()
 
     def _parse_transcribe_params(self):
         """Парсинг параметров транскрипции"""
         transcribe_section = self.config["TRANSCRIBE"]
-        
+
         self.beam_size = Helper.parse_int(transcribe_section.get("beam_size"), default=None)
-        
+
         temperature_raw = transcribe_section.get("temperature", "").strip()
         if ',' in temperature_raw:
             self.temperature = Helper.parse_list_of_floats(temperature_raw, default=None)
         else:
             self.temperature = Helper.parse_float(temperature_raw, default=None)
-            
-        self.condition_on_prev_tokens = Helper.parse_bool(transcribe_section.get("condition_on_prev_tokens"), default=None)
+
+        self.condition_on_prev_tokens = Helper.parse_bool(transcribe_section.get("condition_on_prev_tokens"),
+                                                          default=None)
         self.initial_prompt = transcribe_section.get("initial_prompt", "").strip() or None
-        self.compression_ratio_threshold = Helper.parse_float(transcribe_section.get("compression_ratio_threshold"), default=None)
+        self.compression_ratio_threshold = Helper.parse_float(transcribe_section.get("compression_ratio_threshold"),
+                                                              default=None)
         self.logprob_threshold = Helper.parse_float(transcribe_section.get("logprob_threshold"), default=None)
         self.no_speech_threshold = Helper.parse_float(transcribe_section.get("no_speech_threshold"), default=None)
         self.patience = Helper.parse_float(transcribe_section.get("patience"), default=None)
         self.length_penalty = Helper.parse_float(transcribe_section.get("length_penalty"), default=None)
         self.suppress_blank = Helper.parse_bool(transcribe_section.get("suppress_blank"), default=None)
-        
+
         suppress_tokens_raw = transcribe_section.get("suppress_tokens", "").strip()
         self.suppress_tokens = Helper.parse_list_of_ints(suppress_tokens_raw, default=None)
-        
+
         self.without_timestamps = Helper.parse_bool(transcribe_section.get("without_timestamps"), default=None)
         self.max_initial_timestamp = Helper.parse_float(transcribe_section.get("max_initial_timestamp"), default=None)
         self.fp16 = Helper.parse_bool(transcribe_section.get("fp16"), default=None)
-        self.temperature_increment_on_fallback = Helper.parse_float(transcribe_section.get("temperature_increment_on_fallback"), default=None)
+        self.temperature_increment_on_fallback = Helper.parse_float(
+            transcribe_section.get("temperature_increment_on_fallback"), default=None)
+
 
 # --------------------------------------------------------------------------------------------- #
 
 class AudioProcessor:
     """Класс для обработки аудиофайлов"""
-    
+
     def __init__(self, config):
         self.config = config
         self.audio_exts = ['mp3', 'aac', 'ogg', 'wav', 'opus', 'flac', 'm4a', 'wma', 'aiff', 'amr']
@@ -348,6 +358,9 @@ class AudioProcessor:
         # Инициализация логгера
         self.logger = SSTLogger(self.config.enable_logging)
 
+        # Флаг для отслеживания загрузки модели
+        self.model_loaded = False
+
     def _setup_file_paths(self, audio_path):
         """Настройка путей для текущего аудиофайла"""
         self.current_audio_path = audio_path
@@ -363,6 +376,9 @@ class AudioProcessor:
 
     def initialize_engine(self):
         """Инициализация движка транскрипции и загрузка модели"""
+        if self.model_loaded:
+            return
+
         engine_name = self.config.engine_name
         whisper_model = self.config.whisper_model
         model_path = os.path.join(self.config.model_path, "openai-whisper")
@@ -384,15 +400,29 @@ class AudioProcessor:
         if engine_name == "openai-whisper":
             import whisper
             print(f'Loading model: "{whisper_model}" using engine: {engine_name}...')
+
+            # Показываем прогресс загрузки модели
+            def progress_callback(progress):
+                if isinstance(progress, float):
+                    percentage = progress * 100
+                    print(f'\r    Model loading progress: {percentage:.1f}%', end='', flush=True)
+
+            # Для отслеживания прогресса загрузки модели
+            # Мы создаем временный callback для отображения прогресса
+            print("    Model loading progress: 0.0%", end='', flush=True)
+
             self.model = whisper.load_model(
                 whisper_model,
                 device=device,
                 download_root=model_path
             )
+
+            print(f'\r    Model loading progress: 100.0%')
+            print('✅ Model loaded.\n')
         else:
             raise ValueError(f"Unknown transcribe_engine: '{engine_name}'. Use 'openai-whisper'.")
 
-        print('✅ Model loaded.\n')
+        self.model_loaded = True
         self.logger.log_session_start(engine_name, whisper_model, device)
 
     def should_skip_file(self, audio_path):
@@ -421,18 +451,18 @@ class AudioProcessor:
         """Поиск аудиофайлов в указанной директории"""
         audio_folder = self.config.audio_folder
         print(f'Scanning "{audio_folder}" (including subdirectories)...')
-        
+
         if not os.path.exists(audio_folder):
             print(f'❌ Directory not found: "{audio_folder}"')
             return []
-        
+
         audio_files = []
         for root, dirs, files in os.walk(audio_folder):
             for file in files:
                 if Helper.match_ext(file, self.audio_exts):
                     full_path = os.path.join(root, file)
                     audio_files.append(full_path)
-        
+
         return audio_files
 
     def get_file_info(self, audio_path):
@@ -449,31 +479,55 @@ class AudioProcessor:
 
         return file_size, duration
 
+    def has_files_to_process(self):
+        """Проверяет, есть ли файлы для обработки (без фактической загрузки модели)"""
+        audio_files = self.find_audio_files()
+
+        # Проверяем, есть ли файлы, которые нужно обработать
+        for audio_file in audio_files:
+            self._setup_file_paths(audio_file)
+            if not self.should_skip_file(audio_file):
+                return True
+        return False
+
     def process_all_files(self):
         """Обработка всех аудиофайлов"""
         self.start_time = datetime.now()
         audio_files = self.find_audio_files()
         total_files = len(audio_files)
-        
+
         if total_files == 0:
             print('No audio files found to process.')
             return
-        
+
         print(f'✅ Found {total_files} audio file(s) to process.\n')
-        
-        # Инициализируем движок и загружаем модель
+
+        # Проверяем, есть ли файлы для обработки
+        files_to_process = []
+        for audio_file in audio_files:
+            self._setup_file_paths(audio_file)
+            if not self.should_skip_file(audio_file):
+                files_to_process.append(audio_file)
+
+        if not files_to_process:
+            print('⏭️ All files already processed. Skipping model loading.')
+            return
+
+        print(f'Need to process {len(files_to_process)} file(s).\n')
+
+        # Инициализируем движок и загружаем модель только если есть файлы для обработки
         self.initialize_engine()
-        
+
         # Обработка файлов
         for idx, audio_file in enumerate(audio_files, 1):
             self._process_audiofile_openai_whisper(audio_file, idx, total_files)
-        
+
         print('✅ All files processed.')
         # print(f'✅ Total time: {Helper.format_elapsed_time(datetime.now() - self.start_time)}')
         Helper.print_total_stats(self.processed_files_count, self.total_duration, self.total_processing_time)
         self._log_session_summary()
         print()
-   
+
     def _process_audiofile_openai_whisper(self, audio_path, file_index, total_files):
         """Обработка аудиофайла с использованием openai-whisper"""
         # Проверяем, существует ли файл
@@ -517,17 +571,17 @@ class AudioProcessor:
                 "max_initial_timestamp": self.config.max_initial_timestamp,
                 "fp16": self.config.fp16,
             }
-            
+
             # Если beam_size задано, передаем его
             if self.config.beam_size is not None:
                 transcribe_kwargs["beam_size"] = self.config.beam_size
-            
+
             # Удаляем ключи со значением None
             transcribe_kwargs = {k: v for k, v in transcribe_kwargs.items() if v is not None}
-            
+
             print(f"    Starting transcription with openai-whisper (model: {self.config.whisper_model})...")
             result = self.model.transcribe(audio_path, **transcribe_kwargs)
-            
+
             # Оценка длительности
             if duration == 0 and 'segments' in result and len(result['segments']) > 0:
                 duration = result['segments'][-1]['end']
@@ -537,11 +591,11 @@ class AudioProcessor:
 
             full_text = Helper.save_timecode_file(result, self.current_timecode_file)
 
-#           скрываем избыточный progress bar с прогрессом
-#            if duration > 0:
-#                Helper.print_progress_bar(duration, duration)
-#            print()
-            
+            #           скрываем избыточный progress bar с прогрессом
+            #            if duration > 0:
+            #                Helper.print_progress_bar(duration, duration)
+            #            print()
+
             # Сохраняем сырой текст
             if self.config.export_raw_file:
                 Helper.save_text_files(full_text, self.current_rawtext_file)
@@ -564,7 +618,7 @@ class AudioProcessor:
 
             print(f'✅ Done in {Helper.format_elapsed_time(datetime.now() - file_start_time)}')
             print()
-        
+
         except Exception as e:
             print(f'\n❌ Error processing {audio_path}: {e}')
             # Записываем ошибку в файл
@@ -636,10 +690,12 @@ class AudioTranscriber:
             return False
         return True
 
+
 # --------------------------------------------------------------------------------------------- #
 
 # Глобальная переменная для отслеживания прерывания
 shutdown_requested = False
+
 
 def main():
     """Основная функция"""
@@ -651,6 +707,7 @@ def signal_handler(sig, frame):
     global shutdown_requested
     print('\n\n⚠️ Shutdown requested. Finishing current tasks...')
     shutdown_requested = True
+
 
 # Регистрация обработчика сигнала Ctrl+C
 # signal.signal(signal.SIGINT, signal_handler)
