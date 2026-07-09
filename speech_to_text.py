@@ -911,14 +911,25 @@ class AudioProcessor:
             except Exception:
                 expected_pt = os.path.join(model_path, f"{whisper_model}.pt")
 
+            # Очищаем кэш GPU перед загрузкой модели
+            if device == "cuda":
+                torch.cuda.empty_cache()
+
             progress = ModelLoadProgress()
             progress.wrap_whisper_load(whisper_model, expected_pt)
 
-            self.model = whisper.load_model(
-                whisper_model,
-                device=device,
-                download_root=model_path,
-            )
+            try:
+                self.model = whisper.load_model(
+                    whisper_model,
+                    device=device,
+                    download_root=model_path,
+                )
+            except torch.cuda.OutOfMemoryError:
+                print(f"\n❌ Недостаточно GPU памяти для модели '{whisper_model}'.")
+                props = torch.cuda.get_device_properties(0)
+                print(f"   Доступно: {props.total_memory / 1024**3:.1f} GB")
+                print("   Используйте модель меньшего размера (medium, small, tiny)")
+                sys.exit(1)
 
             progress.unwrap_whisper_load()
             print('✅ Model loaded.\n')
@@ -1093,6 +1104,10 @@ class AudioProcessor:
             )
             print(f'✅ Done in {Helper.format_elapsed_time(datetime.now() - file_start_time)}\n')
 
+            # Освобождаем кэш GPU после каждого файла
+            if self.config.use_cuda and torch.cuda.is_available():
+                torch.cuda.empty_cache()
+
         except KeyboardInterrupt:
             print(f'\n⏹️  Processing cancelled by user for: {audio_path}')
             self.shutdown_requested = True
@@ -1140,8 +1155,11 @@ class AudioTranscriber:
     @staticmethod
     def _print_gpu_info():
         if torch.cuda.is_available():
+            props = torch.cuda.get_device_properties(0)
+            mem_total = props.total_memory / 1024**3
             print(f"🚀 CUDA enabled: {torch.cuda.device_count()} GPU(s) available")
             print(f"   GPU: {torch.cuda.get_device_name(0)}")
+            print(f"   Memory: {mem_total:.1f} GB")
             print(f"   CUDA version: {torch.version.cuda}")
         else:
             print("💻 CUDA disabled: using CPU only")
