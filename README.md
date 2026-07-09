@@ -35,6 +35,44 @@ pip install 'numpy<2.5'
 
 > ⚠️ Для работы с CUDA убедитесь, что у вас установлена совместимая версия `torch` с поддержкой CUDA.
 
+### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-pydub ffmpeg
+pip install torch torchaudio openai-whisper 'numpy<2.5'
+```
+
+> Для CUDA установите torch с поддержкой CUDA через pip (см. [pytorch.org](https://pytorch.org)).
+
+### CentOS / RHEL / Fedora
+
+```bash
+sudo dnf install python3 python3-pip ffmpeg
+pip install torch torchaudio openai-whisper pydub 'numpy<2.5'
+```
+
+> На CentOS/RHEL ffmpeg может потребовать [EPEL](https://docs.fedoraproject.org/en-US/epel/): `sudo dnf install epel-release`.
+
+### Arch Linux
+
+```bash
+sudo pacman -S python python-pip python-pydub python-openai-whisper
+sudo pacman -Syu nvidia nvidia-utils cuda nvidia-open-dkms
+# перезагрузка
+sudo pacman -S python-pytorch-cuda
+```
+
+### Windows
+
+1. Установите [Python 3.8+](https://www.python.org/downloads/) — при установке отметьте «Add Python to PATH».
+2. Установите [FFmpeg](https://ffmpeg.org/download.html) и добавьте путь к `bin\ffmpeg.exe` в `PATH`.
+3. Откройте командную строку (`cmd`) и выполните:
+
+```cmd
+pip install torch torchaudio openai-whisper pydub 'numpy<2.5'
+```
+
 ---
 
 ## 📁 Структура проекта
@@ -104,6 +142,28 @@ temperature_increment_on_fallback = 0.2
 ### 🧠 Параметры [TRANSCRIBE]:
 
 См. документацию [Whisper API](https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L391)
+
+---
+
+## 🚫 Файл плохих слов (settings_badwords.ini)
+
+Файл содержит список паттернов (regex) для удаления нежелательных фраз из расшифровки. Каждая непустая строка — отдельный regex. Строки, начинающиеся с `#`, игнорируются.
+
+Пример `settings_badwords.ini`:
+
+```ini
+# Рекламные вставки
+Субтитры создал
+Субтитры сделал
+Субтитры от
+
+# Шумовые пометки
+\(аплодисменты\)
+\(смех\)
+(музыка)
+```
+
+> Паттерны применяются через `re.sub()` с флагом `IGNORECASE`. Если в regex нужна точка как литерал — экранируйте её (`\.`).
 
 ---
 

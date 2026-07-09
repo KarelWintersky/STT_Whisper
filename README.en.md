@@ -40,6 +40,35 @@ sudo pacman -Syu nvidia nvidia-utils cuda nvidia-open-dkms
 sudo pacman -S python-pytorch-cuda
 ```
 
+### Ubuntu / Debian
+
+```bash
+sudo apt update
+sudo apt install python3 python3-pip python3-pydub ffmpeg
+pip install torch torchaudio openai-whisper 'numpy<2.5'
+```
+
+> For CUDA, install `python3-pytorch-cuda` via pip (see [pytorch.org](https://pytorch.org)).
+
+### CentOS / RHEL / Fedora
+
+```bash
+sudo dnf install python3 python3-pip ffmpeg
+pip install torch torchaudio openai-whisper pydub 'numpy<2.5'
+```
+
+> On CentOS/RHEL ffmpeg may require [EPEL](https://docs.fedoraproject.org/en-US/epel/): `sudo dnf install epel-release`.
+
+### Windows
+
+1. Install [Python 3.8+](https://www.python.org/downloads/) — check «Add Python to PATH» during setup.
+2. Install [FFmpeg](https://ffmpeg.org/download.html) and add `bin\ffmpeg.exe` to `PATH`.
+3. Open Command Prompt (`cmd`) and run:
+
+```cmd
+pip install torch torchaudio openai-whisper pydub 'numpy<2.5'
+```
+
 ---
 
 ## 📁 Project Structure
@@ -107,6 +136,28 @@ temperature_increment_on_fallback = 0.2
 ### 🧠 [TRANSCRIBE] parameters:
 
 See [Whisper API documentation](https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L391)
+
+---
+
+## 🚫 Badwords File (settings_badwords.ini)
+
+Each non-empty line is a regex pattern. Lines starting with `#` are comments.
+
+Example `settings_badwords.ini`:
+
+```ini
+# Advertisement inserts
+Субтитры создал
+Субтитры сделал
+Субтитры от
+
+# Noise markers
+\(applause\)
+\(laughter\)
+(music)
+```
+
+> Patterns are applied via `re.sub()` with `IGNORECASE` flag. Escape literal dots with `\.`.
 
 ---
 
