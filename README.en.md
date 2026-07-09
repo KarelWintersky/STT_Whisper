@@ -101,8 +101,8 @@ logging = true
 
 [TRANSCRIBE]
 beam_size = 5
-temperature = 0.0,0.2,0.4,0.6,0.8,1.0
-condition_on_prev_tokens = true
+temperature = 0.0
+condition_on_prev_tokens = false
 initial_prompt = 
 compression_ratio_threshold = 2.4
 logprob_threshold = -1.0
@@ -136,6 +136,23 @@ temperature_increment_on_fallback = 0.2
 ### 🧠 [TRANSCRIBE] parameters:
 
 See [Whisper API documentation](https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L391)
+
+#### ⚠️ Preventing infinite loops
+
+Some parameter combinations may cause Whisper to loop indefinitely. Safe defaults:
+
+| Parameter | Safe | Risky | Explanation |
+|-----------|------|-------|-------------|
+| `temperature` | `0.0` (single value) | `0.0,0.2,0.4,...` (list) | A temperature list enables fallback mode, which can loop on long files |
+| `condition_on_prev_tokens` | `false` | `true` | Useful for coherence, but on long files often triggers looping |
+| `initial_prompt` | empty | any text | May worsen looping, especially long prompts |
+
+**Recommended for long audio (>30 min):**
+```ini
+temperature = 0.0
+condition_on_prev_tokens = false
+initial_prompt =
+```
 
 ---
 

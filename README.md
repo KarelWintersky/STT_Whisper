@@ -107,8 +107,8 @@ logging = true
 
 [TRANSCRIBE]
 beam_size = 5
-temperature = 0.0,0.2,0.4,0.6,0.8,1.0
-condition_on_prev_tokens = true
+temperature = 0.0
+condition_on_prev_tokens = false
 initial_prompt = 
 compression_ratio_threshold = 2.4
 logprob_threshold = -1.0
@@ -142,6 +142,23 @@ temperature_increment_on_fallback = 0.2
 ### 🧠 Параметры [TRANSCRIBE]:
 
 См. документацию [Whisper API](https://github.com/openai/whisper/blob/main/whisper/transcribe.py#L391)
+
+#### ⚠️ Предотвращение зацикливания
+
+Некоторые комбинации параметров могут вызывать зацикливание (бесконечную генерацию). Вот безопасные настройки:
+
+| Параметр | Безопасно | Опасно | Пояснение |
+|----------|-----------|--------|-----------|
+| `temperature` | `0.0` (одно число) | `0.0,0.2,0.4,...` (список) | Список температур включает fallback-режим, который на длинных файлах может зациклить Whisper |
+| `condition_on_prev_tokens` | `false` | `true` | Учёт предыдущего текста полезен для связности, но на длинных файлах часто вызывает зацикливание |
+| `initial_prompt` | пустая строка | любой текст | Промпт может усугубить зацикливание, особенно если он длинный |
+
+**Рекомендуется для длинных аудиофайлов (>30 мин):**
+```ini
+temperature = 0.0
+condition_on_prev_tokens = false
+initial_prompt =
+```
 
 ---
 
