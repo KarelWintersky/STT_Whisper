@@ -134,7 +134,37 @@ class Helper:
               end='', flush=True)
 
     @staticmethod
+    def clean_text(text):
+        """Очистка текста от строки 'Субтитры сделал DimaTorzok'"""
+        if not text:
+            return text
+
+        # Удаляем строку "Субтитры сделал DimaTorzok" в различных вариантах
+        patterns = [
+            r"Субтитры сделал DimaTorzok",
+            r"Субтитры сделал DimaTorzok\s*",
+            r"\s*Субтитры сделал DimaTorzok\s*",
+            r"Субтитры сделал\s+DimaTorzok",
+            r"Субтитры создавал",
+	    r"Субтитры подогнал «Симон»",
+            r"Субтитры добавил",
+            r"DimaTorzok",
+        ]
+
+        cleaned_text = text
+        for pattern in patterns:
+            cleaned_text = re.sub(pattern, "", cleaned_text, flags=re.IGNORECASE)
+
+        # Удаляем лишние пробелы и пустые строки, которые могли образоваться после удаления
+        cleaned_text = re.sub(r'\n\s*\n', '\n', cleaned_text)  # Удаляем пустые строки
+        cleaned_text = re.sub(r' +', ' ', cleaned_text)  # Заменяем множественные пробелы на один
+        cleaned_text = cleaned_text.strip()  # Удаляем пробелы в начале и конце
+
+        return cleaned_text
+
+    @staticmethod
     def save_timecode_file(result, timecode_file):
+        """Сохранение файла с таймкодами"""
         full_text = []
 
         with open(timecode_file, 'w', encoding='UTF-8') as f:
@@ -142,19 +172,27 @@ class Helper:
                 start = segment['start']
                 end = segment['end']
                 text = segment['text'].strip()
-                hh, mm, ss = int(start // 3600), int((start % 3600) // 60), int(start % 60)
-                f.write(f"[{hh:02d}:{mm:02d}:{ss:02d}] {text}\n")
-                full_text.append(text)
+                # Очищаем текст от строки "Субтитры сделал DimaTorzok"
+                cleaned_text = Helper.clean_text(text)
+                if cleaned_text:  # Записываем только если текст не пустой после очистки
+                    hh, mm, ss = int(start // 3600), int((start % 3600) // 60), int(start % 60)
+                    f.write(f"[{hh:02d}:{mm:02d}:{ss:02d}] {cleaned_text}\n")
+                    full_text.append(cleaned_text)
 
         return full_text
 
     @staticmethod
     def save_text_files(full_text, rawtext_file):
         """Сохранение текстовых файлов"""
+        if not full_text:
+            return
 
-        # Сохраняем сырой текст
+        # Объединяем текст и очищаем его
         rawtext = ' '.join(full_text)
-        rawtext = re.sub(r" +", " ", rawtext)
+        rawtext = Helper.clean_text(rawtext)
+
+        if not rawtext:
+            return
 
         # Разбиваем на абзацы по знакам препинания
         alltext = re.sub(r"([.!?])\s+", r"\1\n", rawtext)
@@ -171,6 +209,14 @@ class Helper:
         try:
             with open(srt_file_path, 'w', encoding='UTF-8') as f:
                 for i, segment in enumerate(result['segments'], 1):
+                    # Получаем текст и очищаем его
+                    text = segment['text'].strip()
+                    cleaned_text = Helper.clean_text(text)
+
+                    # Пропускаем сегмент, если после очистки текст стал пустым
+                    if not cleaned_text:
+                        continue
+
                     # Номер титра
                     f.write(f"{i}\n")
 
@@ -179,9 +225,8 @@ class Helper:
                     end_time = Helper.format_srt_timestamp(segment['end'])
                     f.write(f"{start_time} --> {end_time}\n")
 
-                    # Текст субтитра
-                    text = segment['text'].strip()
-                    f.write(f"{text}\n")
+                    # Очищенный текст субтитра
+                    f.write(f"{cleaned_text}\n")
 
                     # Пустая строка между субтитрами
                     f.write("\n")
@@ -405,14 +450,14 @@ class AudioProcessor:
             print(f'Loading model: "{whisper_model}" using engine: {engine_name}...')
 
             # Показываем прогресс загрузки модели
-            def progress_callback(progress):
-                if isinstance(progress, float):
-                    percentage = progress * 100
-                    print(f'\r    Model loading progress: {percentage:.1f}%', end='', flush=True)
+#            def progress_callback(progress):
+#                if isinstance(progress, float):
+#                    percentage = progress * 100
+#                    print(f'\r    Model loading progress: {percentage:.1f}%', end='', flush=True)
 
             # Для отслеживания прогресса загрузки модели
             # Мы создаем временный callback для отображения прогресса
-            print("    Model loading progress: 0.0%", end='', flush=True)
+#            print("    Model loading progress: 0.0%", end='', flush=True)
 
             self.model = whisper.load_model(
                 whisper_model,
@@ -599,6 +644,12 @@ class AudioProcessor:
                 print("    ⏹️  Processing cancelled by user")
                 return
 
+            # Очищаем результат от строки "Субтитры сделал DimaTorzok"
+            if 'segments' in result:
+                for segment in result['segments']:
+                    if 'text' in segment:
+                        segment['text'] = Helper.clean_text(segment['text'])
+
             # Оценка длительности
             if duration == 0 and 'segments' in result and len(result['segments']) > 0:
                 duration = result['segments'][-1]['end']
@@ -609,7 +660,7 @@ class AudioProcessor:
             full_text = Helper.save_timecode_file(result, self.current_timecode_file)
 
             # Сохраняем сырой текст
-            if self.config.export_raw_file:
+            if self.config.export_raw_file and full_text:
                 Helper.save_text_files(full_text, self.current_rawtext_file)
 
             # Экспортируем SRT субтитры
