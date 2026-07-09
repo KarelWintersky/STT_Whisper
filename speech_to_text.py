@@ -344,6 +344,9 @@ class AudioProcessor:
         self.successful_files_count = 0
         self.failed_files_count = 0
 
+        # Флаг для отслеживания прерывания
+        self.shutdown_requested = False
+
         # Поля для хранения путей текущего файла
         self.current_audio_path = None
         self.current_dirname = None
@@ -520,10 +523,13 @@ class AudioProcessor:
 
         # Обработка файлов
         for idx, audio_file in enumerate(audio_files, 1):
+            if self.shutdown_requested:
+                print("\n⚠️  Shutdown requested. Stopping processing...")
+                break
+
             self._process_audiofile_openai_whisper(audio_file, idx, total_files)
 
         print('✅ All files processed.')
-        # print(f'✅ Total time: {Helper.format_elapsed_time(datetime.now() - self.start_time)}')
         Helper.print_total_stats(self.processed_files_count, self.total_duration, self.total_processing_time)
         self._log_session_summary()
         print()
@@ -580,7 +586,18 @@ class AudioProcessor:
             transcribe_kwargs = {k: v for k, v in transcribe_kwargs.items() if v is not None}
 
             print(f"    Starting transcription with openai-whisper (model: {self.config.whisper_model})...")
+
+            # Проверяем флаг прерывания перед началом транскрипции
+            if self.shutdown_requested:
+                print("    ⏹️  Processing cancelled by user")
+                return
+
             result = self.model.transcribe(audio_path, **transcribe_kwargs)
+
+            # Проверяем флаг прерывания после транскрипции
+            if self.shutdown_requested:
+                print("    ⏹️  Processing cancelled by user")
+                return
 
             # Оценка длительности
             if duration == 0 and 'segments' in result and len(result['segments']) > 0:
@@ -590,11 +607,6 @@ class AudioProcessor:
                 print(f"    Transcribing... (duration: {Helper.format_time(duration)})")
 
             full_text = Helper.save_timecode_file(result, self.current_timecode_file)
-
-            #           скрываем избыточный progress bar с прогрессом
-            #            if duration > 0:
-            #                Helper.print_progress_bar(duration, duration)
-            #            print()
 
             # Сохраняем сырой текст
             if self.config.export_raw_file:
@@ -619,6 +631,12 @@ class AudioProcessor:
             print(f'✅ Done in {Helper.format_elapsed_time(datetime.now() - file_start_time)}')
             print()
 
+        except KeyboardInterrupt:
+            # Перехватываем KeyboardInterrupt и устанавливаем флаг
+            print(f'\n⏹️  Processing cancelled by user for: {audio_path}')
+            self.shutdown_requested = True
+            # Не увеличиваем счетчики для прерванного файла
+            return
         except Exception as e:
             print(f'\n❌ Error processing {audio_path}: {e}')
             # Записываем ошибку в файл
@@ -684,36 +702,37 @@ class AudioTranscriber:
     def run(self):
         """Запуск приложения"""
         try:
+            # Устанавливаем обработчик сигнала
+            original_signal_handler = signal.signal(signal.SIGINT, self._signal_handler)
+
             self.processor.process_all_files()
+
+            # Восстанавливаем оригинальный обработчик сигнала
+            signal.signal(signal.SIGINT, original_signal_handler)
+
         except Exception as e:
             print(f"Ошибка при выполнении приложения: {e}")
             return False
         return True
 
+    def _signal_handler(self, sig, frame):
+        """Обработчик сигнала Ctrl+C"""
+        print('\n\n⚠️  Shutdown requested. Finishing current task...')
+        self.processor.shutdown_requested = True
+
 
 # --------------------------------------------------------------------------------------------- #
-
-# Глобальная переменная для отслеживания прерывания
-shutdown_requested = False
-
 
 def main():
     """Основная функция"""
     app = AudioTranscriber()
-    app.run()
+    success = app.run()
+    return 0 if success else 1
 
-
-def signal_handler(sig, frame):
-    global shutdown_requested
-    print('\n\n⚠️ Shutdown requested. Finishing current tasks...')
-    shutdown_requested = True
-
-
-# Регистрация обработчика сигнала Ctrl+C
-# signal.signal(signal.SIGINT, signal_handler)
 
 # .entrypoint
 if __name__ == '__main__':
-    main()
+    exit_code = main()
+    sys.exit(exit_code)
 
 # -eof- #
